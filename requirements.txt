@@ -8,3 +8,4 @@ httpx
 sqlalchemy
 numpy
 psycopg2-binary
+asyncpg

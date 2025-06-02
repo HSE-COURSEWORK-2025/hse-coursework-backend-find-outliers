@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class DbSettings(BaseSettings):
-    DB_ENGINE: str | None = "postgresql+psycopg2"
+    DB_ENGINE: str | None = "postgresql"
     # DB_HOST: str = "172.16.57.2"
     DB_HOST: str | None = "192.168.0.180"
 
