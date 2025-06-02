@@ -1,45 +1,93 @@
 import logging
-from typing import Any
+from typing import Any, Union, List
 
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncSession,
+)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
+from sqlalchemy.engine import Result
 
 from .settings import settings
 
 logger = logging.getLogger("database")
 
 
-class DbEngine:
+class AsyncDbEngine:
     def __init__(self):
-        self.url = f"{settings.DB_ENGINE}://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-        self.engine = create_engine(self.url, pool_pre_ping=True)
-        self.session = sessionmaker(bind=self.engine)
+        # 1) Формируем URL с драйвером asyncpg
+        #    Например: postgresql+asyncpg://user:password@host:port/dbname
+        self.url = (
+            f"{settings.DB_ENGINE}+asyncpg://"
+            f"{settings.DB_USER}:{settings.DB_PASSWORD}"
+            f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+        )
+        # 2) Создаём асинхронный движок
+        self.engine = create_async_engine(
+            self.url,
+            echo=False,           # или True, если хотите логировать все SQL-запросы
+            pool_pre_ping=True,   # чтобы проверять «жив ли» соединение
+        )
+        # 3) Настраиваем sessionmaker для AsyncSession
+        self._session_factory = sessionmaker(
+            bind=self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False,  # чтобы объекты не «протухали» после commit()
+        )
 
-    def create_session(self):
-        return self.session(bind=self.engine)
+    def create_session(self) -> AsyncSession:
+        """
+        Возвращает новый AsyncSession (без открытия транзакции).
+        Для работы с БД:
+            async with db_engine.create_session() as session:
+                ... await session.execute(...) ...
+        """
+        return self._session_factory()
 
-    def request(self, db_request: str | Any) -> list:
-        with self.create_session() as session:
-            session.begin()
-            try:
-                result = session.execute(db_request)
-            except:
-                session.rollback()
-                raise
-            else:
-                session.commit()
-                return result
+    async def request(
+        self,
+        db_request: Union[str, Any],
+    ) -> List:
+        """
+        Асинхронно выполняет произвольный SQL-запрос (например, text("SELECT ...")) 
+        и возвращает список результатов (fetchall).
+
+        Пример использования:
+            rows = await db_engine.request(text("SELECT * FROM users"))
+            for row in rows:
+                print(row)
+        """
+        # Открываем асинхронную сессию
+        async with self.create_session() as session:
+            # Начинаем транзакцию
+            async with session.begin():
+                try:
+                    result: Result = await session.execute(db_request)
+                    # Если нужно получить все строки:
+                    rows = result.fetchall()
+                except Exception:
+                    # В случае ошибки, транзакция автоматически откатится
+                    raise
+                else:
+                    return rows
 
 
-db_engine = DbEngine()
+# Инстанс асинхронного движка
+db_engine = AsyncDbEngine()
 
 
 async def db_engine_check():
-    logger.info(f"connecting to database {settings.DB_HOST}:{settings.DB_PORT}")
+    """
+    Проверка на подключение к базе: делаем SELECT version();
+    """
+    logger.info(f"Connecting to database {settings.DB_HOST}:{settings.DB_PORT}")
     try:
-        version_info = db_engine.request(text("SELECT version();")).fetchone()
+        # text() — это SQLAlchemy text clause
+        version_row = await db_engine.request(text("SELECT version();"))
     except Exception as e:
-        logger.error(f"error connecting to database: {e}")
-        raise e
-    logger.info(f"database version: {version_info[0]}")
+        logger.error(f"Error connecting to database: {e}")
+        raise
+    # version_row — список кортежей, например [(version_string,)]
+    version_info = version_row[0][0] if version_row else "Unknown"
+    logger.info(f"Database version: {version_info}")
