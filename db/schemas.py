@@ -1,5 +1,3 @@
-import enum
-from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -7,10 +5,8 @@ from sqlalchemy import (
     String,
     DateTime,
     Text,
-    Enum as SQLEnum,
-    ForeignKey
+    ForeignKey,
 )
-from sqlalchemy.sql import expression
 from sqlalchemy.orm import declarative_base, relationship
 
 
@@ -42,7 +38,6 @@ class OutliersRecords(Base):
     outliers_search_iteration_num = Column(Integer, nullable=False)
     outliers_search_iteration_datetime = Column(DateTime(timezone=True), nullable=False)
 
-
     raw_record = relationship("RawRecords", backref="outlier_record", uselist=False)
 
 
@@ -73,9 +68,13 @@ class ProcessedRecordsOutliersRecords(Base):
     __tablename__ = "processed_records_outliers_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    processed_record_id = Column(Integer, ForeignKey("processed_records.id"), nullable=False)
+    processed_record_id = Column(
+        Integer, ForeignKey("processed_records.id"), nullable=False
+    )
 
     outliers_search_iteration_num = Column(Integer, nullable=False)
     outliers_search_iteration_datetime = Column(DateTime(timezone=True), nullable=False)
 
-    processed_records = relationship("ProcessedRecords", backref="processed_records_outliers_records", uselist=False)
+    processed_records = relationship(
+        "ProcessedRecords", backref="processed_records_outliers_records", uselist=False
+    )

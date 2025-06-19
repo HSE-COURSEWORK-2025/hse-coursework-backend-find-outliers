@@ -2,7 +2,7 @@ import datetime
 from typing import List, Optional
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from settings import settings
 
 
